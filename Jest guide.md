@@ -65,7 +65,7 @@ module.exports = {
 - afterEach(fn)：在每个测试用例执行完后执行的方法
 - beforeEach(fn)：在每个测试用例执行之前需要执行的方法
 
-全局和describe都可以有上面四个周期函数，describe的after函数优先级要高于全局的after函数，describe的before函数优先级要低于全局的before函数。
+全局和describe都可以有上面四个周期函数，describe的after函数优先级要高于全局的after函数，describe的before函数优先级要低于全局的before函数，完整的例子见Example.4。
 
 ```javascript
 const myBeverage = {
@@ -117,6 +117,12 @@ describe('my beverage', () => {
 // console.log describe.test.js:20
 // inner test before each
 ```
+
+#### describe和test的执行顺序
+
+Jest在执行任何实际test之前，会首先执行文件中所有describe块的处理程序。这是在before*和after*中进行设置，而不是在describe块中进行设置的另一个原因。
+默认情况下，describe块执行完成后，Jest按照在收集阶段遇到的顺序连续运行所有test，等待每个test完成并在继续之前进行整理。实例见Example.7。
+
 ## 常见断言
 
 1. expect(value)：要测试一个值进行断言的时候，要使用expect对值进行包裹
@@ -172,11 +178,210 @@ describe('async test', () => {
 
 ## Mock Function
 
+在项目中，一个模块的方法内常常会去调用另外一个模块的方法。在单元测试中，我们可能并不需要关心内部调用的方法的执行过程和结果，
+只想知道它是否被正确调用即可，甚至会指定该函数的返回值。此时，使用Mock函数是十分有必要。
+
+Mock函数提供的以下三种特性，在我们写测试代码时十分有用：
+
+- 捕获函数调用情况
+- 设置函数返回值
+- 改变函数的内部实现
+
+Mock函数常用方法：
+1. mockFn.mockName(value)：设置mock函数的名字
+2. mockFn.getMockName()： 返回mockFn.mockName(value)中设置的名字
+3. mockFn.mock.calls：mock函数的调用信息
+
+mockFn.mock.calls返回一个数组，数组中的每一个元素又是一个数组，包含mock函数的调用信息。比如，
+一个被调用两次的模拟函数f，参数为f('arg1'，'arg2')，然后使用参数f('arg3'，'arg4')，mockFn.mock.calls返回的数组形式如下：
+
+> [['arg1', 'arg2'], ['arg3', 'arg4']]
+
+因此，mockFn.mock.calls.length代表mock函数被调用次数，mockFn.mock.calls[0][0]代表第一次调用传入的第一个参数，以此类推。
+
+4. mockFn.mock.results：mock函数的return值，以数组存储
+5. mockFn.mock.instances：mock函数实例
+
+```
+const mockFn = jest.fn();
+
+const a = new mockFn();
+const b = new mockFn();
+
+mockFn.mock.instances[0] === a; // true
+mockFn.mock.instances[1] === b; // true
+```
+
+6. mockFn.mockImplementation(fn)：创建一个mock函数
+
+注意：jest.fn(implementation)是jest.fn().mockImplementation(implementation)的简写。
+
+7. mockFn.mockImplementationOnce(fn)：创建一个mock函数
+
+该函数将用作对mocked函数的一次调用的mock的实现。可以链式调用，以便多个函数调用产生不同的结果。
+
+```
+const myMockFn = jest
+  .fn()
+  .mockImplementationOnce(cb => cb(null, true))
+  .mockImplementationOnce(cb => cb(null, false));
+
+myMockFn((err, val) => console.log(val)); // true
+
+myMockFn((err, val) => console.log(val)); // false
+```
+
+当mocked函数用完使用mockImplementationOnce定义的实现时，如果调用它们，
+它将使用jest.fn(()=> defaultValue)或.mockImplementation(()=> defaultValue)执行默认实现集：
+```
+const myMockFn = jest
+  .fn(() => 'default')
+  .mockImplementationOnce(() => 'first call')
+  .mockImplementationOnce(() => 'second call');
+
+// 'first call', 'second call', 'default', 'default'
+console.log(myMockFn(), myMockFn(), myMockFn(), myMockFn());
+```
+
+8. mockFn.mockReturnThis()：jest.fn()的语法糖
+
+```
+jest.fn(function() {
+  return this;
+});
+```
+
+9. mockFn.mockReturnValue(value)：接受一个值作为调用mock函数时的返回值
+
+```
+const mock = jest.fn();
+mock.mockReturnValue(42);
+mock(); // 42
+mock.mockReturnValue(43);
+mock(); // 43
+```
+
+10. mockFn.mockReturnValueOnce(value)：接受一个值作为调用mock函数时的返回值，可以链式调用，以便产生不同的结果。
+
+当不再使用mockReturnValueOnce值时，调用将返回mockReturnValue指定的值。
+
+```
+const myMockFn = jest
+  .fn()
+  .mockReturnValue('default')
+  .mockReturnValueOnce('first call')
+  .mockReturnValueOnce('second call');
+
+// 'first call', 'second call', 'default', 'default'
+console.log(myMockFn(), myMockFn(), myMockFn(), myMockFn());
+```
+
+11. mockFn.mockResolvedValue(value)：mock异步函数的语法糖
+
+实现上类似于
+
+```
+jest.fn().mockImplementation(() => Promise.resolve(value));
+```
+
+用于在test中模拟异步函数
+
+```
+test('async test', async () => {
+  const asyncMock = jest.fn().mockResolvedValue(43);
+
+  await asyncMock(); // 43
+});
+```
+
+12. mockFn.mockResolvedValueOnce(value)：语法糖
+
+实现上类似于
+
+```
+jest.fn().mockImplementationOnce(() => Promise.resolve(value));
+```
+
+```
+test('async test', async () => {
+  const asyncMock = jest
+    .fn()
+    .mockResolvedValue('default')
+    .mockResolvedValueOnce('first call')
+    .mockResolvedValueOnce('second call');
+
+  await asyncMock(); // first call
+  await asyncMock(); // second call
+  await asyncMock(); // default
+  await asyncMock(); // default
+});
+```
+
+13. mockFn.mockRejectedValue(value)：语法糖
+
+实现上类似于
+
+```
+jest.fn().mockImplementation(() => Promise.reject(value));
+```
+
+```
+test('async test', async () => {
+  const asyncMock = jest.fn().mockRejectedValue(new Error('Async error'));
+
+  await asyncMock(); // throws "Async error"
+});
+```
+
+14. mockFn.mockRejectedValueOnce(value)：语法糖
+
+实现上类似于
+
+```
+jest.fn().mockImplementationOnce(() => Promise.reject(value));
+```
+
+```
+test('async test', async () => {
+  const asyncMock = jest
+    .fn()
+    .mockResolvedValueOnce('first call')
+    .mockRejectedValueOnce(new Error('Async error'));
+
+  await asyncMock(); // first call
+  await asyncMock(); // throws "Async error"
+});
+```
+
+15. mockFn.mockClear()：重置所有存储在mockFn.mock.calls 和 mockFn.mock.instances数组中的信息
+
+当你想要清除两个断言之间的模拟使用数据时，这通常很有用。
+
+16. mockFn.mockReset()：完成mockFn.mockClear()所做的所有事情，还删除任何模拟的返回值或实现
+
+当你想要将模拟完全重置回其初始状态时，这非常有用。（请注意，重置spy将导致函数没有返回值）。
+
+17. mockFn.mockRestore()：完成mockFn.mockReset()所做的所有事情，并恢复原始（非模拟）实现
+
+当你想在某些测试用例中模拟函数并在其他测试用例中恢复原始实现时，这非常有用。
+
+
 ## Timer Mock
 
 ## Manual Mock
 
 ## ES6 Class Mock
+
+
+## 推荐阅读
+
+[使用Jest测试JavaScript (入门篇)](https://segmentfault.com/a/1190000016232248)
+
+[使用Jest测试JavaScript(Mock篇)](https://segmentfault.com/a/1190000016717356)
+
+[顶级测试框架Jest指南：跑通一个完美的程序，就是教出一群像样的学生](https://segmentfault.com/a/1190000016399447)
+
+[Jest cheat sheet](https://github.com/sapegin/jest-cheat-sheet)
 
 
 
