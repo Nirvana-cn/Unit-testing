@@ -365,8 +365,146 @@ test('async test', async () => {
 
 当你想在某些测试用例中模拟函数并在其他测试用例中恢复原始实现时，这非常有用。
 
+## jest.mock and jest.spyOn
+
+jest对象上有fn,mock,spyOn三个方法，在实际项目的单元测试中，jest.fn()常被用来进行某些有回调函数的测试；jest.mock()可以mock整个模块中的方法，
+当某个模块已经被单元测试100%覆盖时，使用jest.mock()去mock该模块，节约测试时间和测试的冗余度是十分必要；
+当需要测试某些必须被完整执行的方法时，常常需要使用jest.spyOn()。
+
+如Example.8中所示，event.js中调用了fetch.js的方法，fetch.js文件夹中封装的请求方法可能我们在其他模块被调用的时候，
+并不需要进行实际的请求（请求方法已经通过单侧或需要该方法返回非真实数据）。此时，使用jest.mock(）去mock整个模块是十分有必要的。
+
+```
+// event.test.js
+import events from './event';
+import fetch from './fetch';
+
+jest.mock('./fetch.js');
+
+test('mock 整个 fetch.js模块', async () => {
+    expect.assertions(2);
+    await events.getPostList();
+    expect(fetch.fetchPostsList).toHaveBeenCalled();
+    expect(fetch.fetchPostsList).toHaveBeenCalledTimes(1);
+});
+```
+
+jest.spyOn()方法同样创建一个mock函数，但是该mock函数不仅能够捕获函数的调用情况，还可以正常的执行被spy的函数。
+实际上，jest.spyOn()是jest.fn()的语法糖，它创建了一个和被spy的函数具有相同内部代码的mock函数。
+
+event.test.js是jest.mock()的示例代码，从控制台中可以看到console.log('fetchPostsList be called!');这行代码并没有被打印，
+这是因为通过jest.mock()后，模块内的方法是不会被jest所实际执行的。这时我们就需要使用jest.spyOn()。
+
+```
+// event2.test.js
+import events from './event';
+import fetch from './fetch';
+
+test('使用jest.spyOn()监控fetch.fetchPostsList被正常调用', async() => {
+    expect.assertions(2);
+    const spyFn = jest.spyOn(fetch, 'fetchPostsList');
+    await events.getPostList();
+    expect(spyFn).toHaveBeenCalled();
+    expect(spyFn).toHaveBeenCalledTimes(1);
+})
+```
+
+执行测试之后，可以看到控制台中的打印信息，说明通过jest.spyOn()，fetchPostsList被正常的执行了。
+
+> TIPS：在jest中如果想捕获函数的调用情况，则该函数必须被mock或者spyOn！
 
 ## Timer Mock
+
+jest可以模拟定时器从而允许自主控制时间流逝。模拟定时器运行可以方便测试，比如不必等待一个很长的延时而是直接获取结果。
+
+jest对象上与timer mock相关的方法主要有以下个：
+
+1. jest.useFakeTimers()：指示Jest使用标准计时器函数的假版本（setTimeout，setInterval，clearTimeout，clearInterval，nextTick，setImmediate和clearImmediate）。
+2. jest.useRealTimers()：指示Jest使用标准计时器功能的真实版本。
+3. jest.clearAllTimers()：从计时器系统中清除任何等待的计时器。
+4. jest.runAllTicks()：执行微任务队列中的所有任务（通常通过process.nextTick在节点中连接）。
+5. jest.runAllTimers()：执行宏任务队列中的所有任务。
+6. jest.runAllImmediates()：通过setImmediate()执行任务队列中的所有任务。
+7. jest.advanceTimersByTime(n)：执行宏任务队列中的所有任务，当该API被调用时，所有定时器被提前 n 秒。
+8. jest.runOnlyPendingTimers()：仅执行宏任务中当前正在等待的任务。
+
+举例来说(见Example.5):
+
+```
+// timer.js
+function timerGame(callback) {
+    console.log('Ready....go!');
+    setTimeout(() => {
+        console.log('Times up -- stop!');
+        callback && callback();
+    }, 1000);
+}
+
+module.exports = timerGame;
+```
+
+我们在timer.js中设定了一个1s钟之后才会执行的定时器，但是测试代码是同步执行，通过timer mock，我们不必等待定时器执行完成就可以完成测试。
+
+```
+const timer = require('./timer');
+const callback = jest.fn();
+
+jest.useFakeTimers();
+
+test('calls the callback after 1 second', () => {
+    timer(callback);
+
+    expect(callback).not.toBeCalled();
+
+    expect(setTimeout).toHaveBeenCalledTimes(1);
+    expect(setInterval).toHaveBeenCalledTimes(0);
+    expect(setTimeout).toHaveBeenLastCalledWith(expect.any(Function), 1000);
+
+    jest.runAllTimers();
+
+    expect(callback).toBeCalled();
+    expect(callback).toHaveBeenCalledTimes(1);
+});
+```
+
+在上面的代码中，我们已经在第四行声明使用假时间，在test块中，虽然setTimeout尚未执行完毕，但是测试已经完成，
+setTimeout执行一次，没有setInterval执行，这与期望一致。接下来调用jest.runAllTimers()使得所有定时器立即执行完毕，控制台打印定时器中的输出。
+
+对于递归定时器的情况，如果使用jest.runAllTimers()，所有的定时器就无限循环了，这个时候就需要用到jest.runOnlyPendingTimers()了，
+因为runOnlyPendingTimers的过程中不会产生新的定时器，从而避免了无限循环的问题，如Example.5 中pendingTimer所示。
+
+jest.advanceTimersByTime(n)也很容易理解，就是将所有定时器提前n秒执行。如下所示，在未调用jest.advanceTimersByTime(n)之前，callback还没有被调用，
+然后通过jest.advanceTimersByTime(1000)让定时器提前1s执行，因此接下来的断言不会报错。
+
+```
+// timer3.test.js
+const timerGame = require('./timer');
+const callback = jest.fn();
+jest.useFakeTimers();
+
+test('calls the callback after 1 second via advanceTimersByTime', () => {
+    timerGame(callback);
+
+    // At this point in time, the callback should not have been called yet
+    expect(callback).not.toBeCalled();
+
+    // Fast-forward until all timers have been executed
+    jest.advanceTimersByTime(1000);
+
+    // Now our callback should have been called!
+    expect(callback).toBeCalled();
+    expect(callback).toHaveBeenCalledTimes(1);
+});
+```
+
+同样的，如果使用jest.advanceTimersByTime(500)提前0.5s，上面的测试可以进行如下修改。
+
+```
+jest.advanceTimersByTime(500);
+
+expect(callback).not.toBeCalled();
+expect(callback).toHaveBeenCalledTimes(0);
+```
 
 ## Manual Mock
 
