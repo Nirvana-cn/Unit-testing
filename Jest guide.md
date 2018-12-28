@@ -508,7 +508,34 @@ expect(callback).toHaveBeenCalledTimes(0);
 
 ## Manual Mock
 
+Manual Mock用于存储模拟数据的功能。例如，您可能希望创建一个允许您使用虚假数据的手动模拟，而不是访问网站或数据库等远程资源。
+这可以确保您的测试快速且稳定。
+
+通过在紧邻模块的__mocks __ 子目录中编写模块来定义手动模拟。例如，要在models目录中模拟一个名为user的模块(如Example.9 所示)，
+请创建一个名为user.js的文件并将其放在models / __ mocks__目录中。同时请注意__mocks__文件夹区分大小写。
+
+** 注意比较Example.8 和 Example.9 中jest.mock的不同，由于Example.8中没有__mocks__文件夹，所以mock并不会真正运行，而在Example.9中会使用__mocks__下的同名文件进行替换。
+
+```
+// userMocked.test.js
+import user from './models/user';
+
+jest.mock('./models/user');
+
+test('if user model is mocked', () => {
+    expect(user.getAuthenticated()).toEqual({age: 622, name: 'Mock name'});
+});
+```
+
+如果您正在模拟的模块是Node模块（例如：lodash），则mock应放在与node_modules相邻的__mocks__目录中，并将自动模拟。没有必要显式调用jest.mock（'module_name'）。
+但是如果想模拟Node的核心模块（例如：fs或path），那么明确地调用例如： jest.mock（'path'）是必需的，因为默认情况下不会模拟核心Node模块。
+
+如果您正在使用ES6模块导入，那么您通常倾向于将导入语句放在测试文件的顶部。但是通常你需要指示Jest在模块使用它之前使用模拟。
+出于这个原因，Jest会自动将jest.mock调用提升到模块的顶部（在任何导入之前）。
+
 ## ES6 Class Mock
+
+
 
 
 ## 推荐阅读
@@ -521,6 +548,7 @@ expect(callback).toHaveBeenCalledTimes(0);
 
 [Jest cheat sheet](https://github.com/sapegin/jest-cheat-sheet)
 
+[Jest官方demo](https://github.com/facebook/jest/tree/master/examples)
 
 
 
