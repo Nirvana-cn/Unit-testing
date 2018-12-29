@@ -535,8 +535,68 @@ test('if user model is mocked', () => {
 
 ## ES6 Class Mock
 
+如Example.6中所示，分别有SoundPlayer类和使用该类的SoundPlayerConsumer类。我们将在SoundPlayerConsumer的测试中模拟SoundPlayer。
 
+```
+// sound-player.js
+export default class SoundPlayer {
+  constructor() {
+    this.foo = 'bar';
+  }
 
+  playSoundFile(fileName) {
+    console.log('Playing sound file ' + fileName);
+  }
+}
+```
+
+```
+// sound-player-consumer.js
+import SoundPlayer from './sound-player';
+
+export default class SoundPlayerConsumer {
+  constructor() {
+    this.soundPlayer = new SoundPlayer();
+  }
+
+  playSomethingCool() {
+    const coolSoundFileName = 'song.mp3';
+    this.soundPlayer.playSoundFile(coolSoundFileName);
+  }
+}
+```
+
+分别有4种方法可以创建ES6类的模拟：
+
+1. Automatic mock
+
+使用该方法，类中的所有方法调用状态保存在theAutomaticMock.mock.instances[index].methodName.mock.calls中。
+
+同时，如果您在类中使用了箭头函数，它们将不会成为模拟的一部分。因为箭头函数不存在于对象的原型上，它们只是包含对函数的引用的属性。
+
+** 注：由于Example.6中同时存在Automatic mock和Manual mock，所以在使用该方法时需要把__mocks__文件夹改个名。
+
+2. Manual mock
+
+在相邻的__mocks__文件夹下生成同名文件从而进行替换模拟。
+
+** 注意：使用manual mock时确保__mocks__文件夹命名正确。
+
+3. Calling jest.mock() with the module factory parameter
+
+使用此种方法就是在jest.mock()中添加一个参数：jest.mock(path，moduleFactory)接受moduleFactory参数，moduleFactory返回一个模拟的函数。
+为了模拟构造函数，moduleFactory必须返回构造函数，换句话说，模块工厂必须是返回函数的函数。
+
+4. Replacing the mock using mockImplementation() or mockImplementationOnce()
+
+对jest.mock的调用会被提升到代码的顶部。 您通过在现有mock上调用mockImplementation()（或mockImplementationOnce()）而不是使用factory参数，
+从而稍后指定模拟（例如，在beforeAll()），或者在测试之间更改模拟。
+
+## Bypassing Module Mock
+
+Jest允许您模拟测试中的整个模块，这有助于测试代码是否正确，函数调用是否正确。
+但是，有时您可能希望在测试文件中使用模拟模块的一部分，在这种情况下，您希望访问原始实现，而不是模拟版本。
+jest.requireActual()允许你导入实际的版本，而不是模拟的版本。
 
 ## 推荐阅读
 

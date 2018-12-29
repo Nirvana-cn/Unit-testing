@@ -31,21 +31,3 @@ test('We can check if the consumer called a method on the class instance', () =>
     expect(mockPlaySoundFile).toHaveBeenCalledWith(coolSoundFileName);
     expect(mockPlaySoundFile).toHaveBeenCalledTimes(1);
 });
-
-// console.log describe.test.js:7
-// global before all
-//
-// console.log describe.test.js:16
-// inner test before all
-//
-// console.log describe.test.js:11
-// global before each
-//
-// console.log describe.test.js:20
-// inner test before each
-//
-// console.log describe.test.js:11
-// global before each
-//
-// console.log describe.test.js:20
-// inner test before each
